@@ -1,0 +1,31 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "agents": {
+    "scene": ["task"],
+    "tags": ["OpenAI Agents SDK", "Node.js", "定时任务", "趋势分析", "沙箱浏览器"],
+    "runtime": "node",
+    "slug": "ai-trends-scheduled-summary-node",
+    "framework": "openai-agents-sdk",
+    "timeout": 1200
+  },
+  "agent": {
+    "sandbox": {
+      "timeout": 300
+    }
+  },
+  "schedules": [
+    {
+      "name": "ai-trends-periodic",
+      "cron": "40 14 * * *",
+      "path": "/ai-trends/run",
+      "payload": {
+        "_schedule": true,
+        "trigger": "schedule",
+        "sources": ["hackernews", "devto", "web"],
+        "limit": 30
+      },
+      "timeout": 1200
+    }
+  ]
+}
