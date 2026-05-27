@@ -29,7 +29,7 @@ export async function runReport(signal?: AbortSignal): Promise<TrendReport> {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Conversation-Id': CONVERSATION_ID,
+      'makers-conversation-id': CONVERSATION_ID,
     },
     body: JSON.stringify({
       conversation_id: CONVERSATION_ID,
@@ -81,7 +81,7 @@ export async function runReportSSE(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Conversation-Id': CONVERSATION_ID,
+      'makers-conversation-id': CONVERSATION_ID,
     },
     body: JSON.stringify({
       conversation_id: CONVERSATION_ID,
@@ -96,18 +96,6 @@ export async function runReportSSE(
     throw new Error('No response body');
   }
 
-  // ── DIAGNOSTIC: passive observation only, no server-side changes ──
-  // Logs every reader.read() resolution so we can correlate disconnect
-  // timing with visibility changes. Remove once root cause is found.
-  const t0 = performance.now();
-  let lastDataAt = t0;
-  let readSeq = 0;
-  let totalBytes = 0;
-  console.log('[sse] start', {
-    visibility: document.visibilityState,
-    timestamp: new Date().toISOString(),
-  });
-
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -116,33 +104,7 @@ export async function runReportSSE(
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const { done, value } = await reader.read();
-    readSeq++;
-    const now = performance.now();
-    const sinceStart = ((now - t0) / 1000).toFixed(2);
-    const sinceLastData = ((now - lastDataAt) / 1000).toFixed(2);
-    const bytes = value?.byteLength ?? 0;
-    if (bytes) totalBytes += bytes;
-    console.log('[sse] read', {
-      seq: readSeq,
-      done,
-      bytes,
-      totalBytes,
-      sinceStart: sinceStart + 's',
-      sinceLastData: sinceLastData + 's',
-      visibility: document.visibilityState,
-    });
-    if (bytes) lastDataAt = now;
-    if (done) {
-      console.log('[sse] CLOSED', {
-        finalReport: !!finalReport,
-        readCount: readSeq,
-        totalBytes,
-        runDuration: sinceStart + 's',
-        droughtBeforeClose: sinceLastData + 's',
-        visibility: document.visibilityState,
-      });
-      break;
-    }
+    if (done) break;
     buffer += decoder.decode(value, { stream: true });
 
     const lines = buffer.split('\n');
@@ -185,6 +147,9 @@ function dispatchEvent(event: StreamEvent | PipelineEvent, cb: SSECallbacks): vo
         return;
       case 'analysis':
         cb.onAnalysis?.(event);
+        return;
+      case 'progress':
+        // Progress events keep the SSE alive; no UI update needed.
         return;
       case 'token':
         cb.onToken?.(event);

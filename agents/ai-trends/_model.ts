@@ -26,28 +26,39 @@ function createModel(env: Record<string, string | undefined>): OpenAIChatComplet
     baseURL: env.LLM_BASE_URL || env.AI_GATEWAY_BASE_URL || env.OPENAI_BASE_URL,
     timeout: 600000,
   });
-  const modelName = env.LLM_MODEL || env.AI_GATEWAY_MODEL || '@Pages/deepseek-v4-flash';
+  const modelName = env.LLM_MODEL || env.AI_GATEWAY_MODEL || '@makers/minimax-m2.7';
   return new OpenAIChatCompletionsModel(client as any, modelName);
 }
 
 // ── JSON parsing helpers ──────────────────────────────────────────
 
+/**
+ * Strip <think>...</think> reasoning tags that some models (DeepSeek, etc.)
+ * emit in their output. These should never appear in final user-facing content.
+ * Handles multiline content and multiple occurrences.
+ */
+function stripThinkingTags(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+}
+
 function parseJsonFromText<T>(text: string): T | null {
+  // Strip thinking tags first — some models prepend <think>...</think> before JSON
+  const cleaned = stripThinkingTags(text);
   // Try direct parse
   try {
-    return JSON.parse(text) as T;
+    return JSON.parse(cleaned) as T;
   } catch { /* continue */ }
   // Try extracting JSON block from markdown code fence
-  const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
   if (fenceMatch) {
     try { return JSON.parse(fenceMatch[1]) as T; } catch { /* continue */ }
   }
   // Try extracting first { ... } or [ ... ]
-  const objMatch = text.match(/\{[\s\S]*\}/);
+  const objMatch = cleaned.match(/\{[\s\S]*\}/);
   if (objMatch) {
     try { return JSON.parse(objMatch[0]) as T; } catch { /* continue */ }
   }
-  const arrMatch = text.match(/\[[\s\S]*\]/);
+  const arrMatch = cleaned.match(/\[[\s\S]*\]/);
   if (arrMatch) {
     try { return JSON.parse(arrMatch[0]) as T; } catch { /* continue */ }
   }
@@ -410,6 +421,8 @@ export interface PipelineInput {
   onProgress?: (event: PipelineEmit) => void;
   /** Sandbox instance (context.sandbox) — used to create sandbox tools for Agent */
   sandbox?: unknown;
+  /** AbortSignal from the platform — when triggered, pipeline should stop ASAP */
+  signal?: AbortSignal;
 }
 
 export interface PipelineStageResult {
@@ -421,11 +434,74 @@ export interface PipelineStageResult {
   error?: string;
 }
 
+/**
+ * Run an agent in streaming mode, emitting `progress` events every few seconds
+ * to keep the SSE connection alive (avoids CDN idle-timeout, typically 60s).
+ *
+ * If the stream fails with a transient error ("terminated", socket closed, etc.),
+ * automatically retries once with a non-streaming call so the pipeline isn't
+ * blocked by intermittent AI Gateway connection resets.
+ *
+ * The caller gets the same result shape as non-streaming `run()`.
+ */
+async function streamWithProgress(
+  agent: Agent<unknown>,
+  prompt: string,
+  stage: string,
+  emit: (event: PipelineEmit) => void,
+  intervalMs = 8000,
+  signal?: AbortSignal,
+): Promise<{ finalOutput: string }> {
+  try {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+    let accumulated = '';
+    let tokenCount = 0;
+    let lastEmitAt = Date.now();
+
+    const result = await run(agent, prompt, { stream: true, signal });
+
+    for await (const event of result.toStream() as AsyncIterable<unknown>) {
+      if (signal?.aborted) break;
+      const ev = event as { type?: string; data?: { type?: string; delta?: unknown } };
+      if (ev.type === 'raw_model_stream_event' && ev.data?.type === 'output_text_delta') {
+        const delta = String(ev.data.delta || '');
+        if (delta) {
+          accumulated += delta;
+          tokenCount++;
+          // Emit progress periodically to keep the SSE alive and show activity.
+          if (Date.now() - lastEmitAt >= intervalMs) {
+            emit({ type: 'progress', stage, tokenCount, chars: accumulated.length });
+            lastEmitAt = Date.now();
+          }
+        }
+      }
+    }
+
+    // SDK's finalOutput is preferred (it strips internal framing if any).
+    const finalOutput = (result as { finalOutput?: string }).finalOutput;
+    const raw = typeof finalOutput === 'string' ? finalOutput : accumulated;
+    return { finalOutput: stripThinkingTags(raw) };
+  } catch (streamError) {
+    // If aborted, rethrow immediately — don't retry
+    if (signal?.aborted || (streamError instanceof Error && streamError.name === 'AbortError')) {
+      throw streamError;
+    }
+    // Transient failures (AI Gateway connection reset, "terminated", socket closed)
+    // → retry once without streaming. The pipeline keeps going.
+    const msg = streamError instanceof Error ? streamError.message : String(streamError);
+    console.warn(`[pipeline] ${stage} stream failed (${msg}), retrying without stream`);
+    console.warn(`[pipeline] ${stage} full error:`, streamError);
+    const retryResult = await run(agent, prompt, { signal });
+    return { finalOutput: stripThinkingTags(String(retryResult.finalOutput || '')) };
+  }
+}
+
 export async function runAgentPipeline(input: PipelineInput): Promise<{
   report: TrendReport;
   stages: PipelineStageResult;
 }> {
-  const { items, historyItems, runId, trigger, env, noNewItems, onProgress, sandbox } = input;
+  const { items, historyItems, runId, trigger, env, noNewItems, onProgress, sandbox, signal } = input;
   const stages: PipelineStageResult = {};
   const emit = onProgress ?? (() => {});
 
@@ -443,8 +519,8 @@ export async function runAgentPipeline(input: PipelineInput): Promise<{
     const itemsJson = buildItemsJson(items);
 
     const [curatorResult, summarizerResult] = await Promise.allSettled([
-      run(curatorAgent, `请策展以下候选内容：\n${itemsJson}`),
-      run(summarizerAgent, `请为以下资讯生成中文摘要：\n${itemsJson}`),
+      streamWithProgress(curatorAgent, `请策展以下候选内容：\n${itemsJson}`, 'curator', emit, 8000, signal),
+      streamWithProgress(summarizerAgent, `请为以下资讯生成中文摘要：\n${itemsJson}`, 'summarizer', emit, 8000, signal),
     ]);
     console.log(`[pipeline] Stage 1+2 done (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
     const stage12Duration = (Date.now() - t0) / 1000;
@@ -521,9 +597,20 @@ export async function runAgentPipeline(input: PipelineInput): Promise<{
       emit({ stage: 'summarizer', status: 'failed', duration: stage12Duration, detail: 'agent error' });
     }
   } catch (error) {
+    // If aborted, rethrow to skip remaining stages
+    if (signal?.aborted || (error instanceof Error && error.name === 'AbortError')) {
+      console.log('[pipeline] Stage 1+2 aborted by user');
+      throw error;
+    }
     stages.failedStage = 'curator+summarizer';
     stages.error = error instanceof Error ? error.message : String(error);
     console.log('[pipeline] Stage 1+2 error:', stages.error);
+  }
+
+  // ── Abort check between stages ──
+  if (signal?.aborted) {
+    console.log('[pipeline] Aborted before Stage 3');
+    throw new DOMException('Aborted', 'AbortError');
   }
 
   // ── Stage 3: Analyst ────────────────────────────────────────────
@@ -534,7 +621,7 @@ export async function runAgentPipeline(input: PipelineInput): Promise<{
     console.log('[pipeline] Stage 3 (Analyst) start');
     emit({ stage: 'analyst', status: 'running' });
     const analystAgent = createAnalystAgent(env, enrichedItems, historyItems, sandbox);
-    const analystResult = await run(analystAgent, buildAnalystPrompt(enrichedItems, noNewItems));
+    const analystResult = await streamWithProgress(analystAgent, buildAnalystPrompt(enrichedItems, noNewItems), 'analyst', emit, 8000, signal);
     const raw = String(analystResult.finalOutput || '');
     const parsed = parseJsonFromText<TrendAnalysis>(raw);
     const d1 = +(((Date.now() - t1) / 1000).toFixed(1));
@@ -559,47 +646,99 @@ export async function runAgentPipeline(input: PipelineInput): Promise<{
       emit({ stage: 'analyst', status: 'failed', duration: d1, detail: 'parse failed' });
     }
   } catch (error) {
+    if (signal?.aborted || (error instanceof Error && error.name === 'AbortError')) {
+      console.log('[pipeline] Stage 3 aborted by user');
+      throw error;
+    }
     stages.failedStage = stages.failedStage || 'analyst';
     stages.error = stages.error || (error instanceof Error ? error.message : String(error));
     console.log('[pipeline] Analyst error:', stages.error);
     emit({ stage: 'analyst', status: 'failed', detail: stages.error });
   }
 
-  // ── Stage 4: Writer (token-streaming) ───────────────────────────
+  // ── Abort check between stages ──
+  if (signal?.aborted) {
+    console.log('[pipeline] Aborted before Stage 4');
+    throw new DOMException('Aborted', 'AbortError');
+  }
+
+  // ── Stage 4: Writer (token-streaming with non-stream fallback) ───
   try {
     const t2 = Date.now();
     console.log('[pipeline] Stage 4 (Writer) start — streaming');
     emit({ stage: 'writer', status: 'running' });
     const writerAgent = createWriterAgent(env);
+    const writerPrompt = buildWriterPrompt(enrichedItems, analysis, noNewItems);
 
-    // Stream the writer's tokens through SSE so the frontend can render a
-    // live-typing preview of the report during the final ~30s of the run.
-    let accumulated = '';
-    const writerStreamResult = await run(
-      writerAgent,
-      buildWriterPrompt(enrichedItems, analysis, noNewItems),
-      { stream: true },
-    );
+    let markdown = '';
 
-    // Iterate the SDK's event stream. Filter for output_text_delta and
-    // forward each delta to the client as a `{ type: 'token' }` SSE event.
-    for await (const event of writerStreamResult.toStream() as AsyncIterable<unknown>) {
-      const ev = event as { type?: string; data?: { type?: string; delta?: unknown } };
-      if (ev.type === 'raw_model_stream_event' && ev.data?.type === 'output_text_delta') {
-        const delta = String(ev.data.delta || '');
-        if (delta) {
-          accumulated += delta;
-          emit({ type: 'token', delta });
+    try {
+      // Primary path: stream tokens to the client for live-typing UX.
+      let accumulated = '';
+      let insideThink = false; // Track if we're inside <think>...</think>
+      let thinkBuffer = '';    // Buffer to detect partial <think> or </think> tags
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      const writerStreamResult = await run(writerAgent, writerPrompt, { stream: true, signal });
+
+      for await (const event of writerStreamResult.toStream() as AsyncIterable<unknown>) {
+        if (signal?.aborted) break;
+        const ev = event as { type?: string; data?: { type?: string; delta?: unknown } };
+        if (ev.type === 'raw_model_stream_event' && ev.data?.type === 'output_text_delta') {
+          const delta = String(ev.data.delta || '');
+          if (delta) {
+            accumulated += delta;
+            // Filter out <think>...</think> from live stream
+            thinkBuffer += delta;
+            if (insideThink) {
+              const closeIdx = thinkBuffer.indexOf('</think>');
+              if (closeIdx !== -1) {
+                insideThink = false;
+                const afterClose = thinkBuffer.slice(closeIdx + 8);
+                thinkBuffer = '';
+                if (afterClose) emit({ type: 'token', delta: afterClose });
+              }
+              // else: still inside think, swallow token
+            } else {
+              const openIdx = thinkBuffer.indexOf('<think>');
+              if (openIdx !== -1) {
+                insideThink = true;
+                const beforeOpen = thinkBuffer.slice(0, openIdx);
+                thinkBuffer = thinkBuffer.slice(openIdx + 7);
+                if (beforeOpen) emit({ type: 'token', delta: beforeOpen });
+              } else if (thinkBuffer.length > 7) {
+                // Safe to flush — no partial <think> tag possible
+                const safe = thinkBuffer.slice(0, -7);
+                thinkBuffer = thinkBuffer.slice(-7);
+                emit({ type: 'token', delta: safe });
+              }
+            }
+          }
         }
       }
-    }
+      // Flush remaining buffer (if not inside think)
+      if (!insideThink && thinkBuffer) {
+        emit({ type: 'token', delta: thinkBuffer });
+      }
 
-    // Prefer the SDK's finalOutput (already trimmed of any internal scaffolding);
-    // fall back to the locally-accumulated tokens if it's missing.
-    const finalOutput = (writerStreamResult as { finalOutput?: string }).finalOutput;
-    const markdown = (typeof finalOutput === 'string' && finalOutput.trim())
-      ? finalOutput.trim()
-      : accumulated.trim();
+      const finalOutput = (writerStreamResult as { finalOutput?: string }).finalOutput;
+      markdown = stripThinkingTags(
+        (typeof finalOutput === 'string' && finalOutput.trim())
+          ? finalOutput.trim()
+          : accumulated.trim()
+      );
+    } catch (streamError) {
+      // If aborted, rethrow — don't retry
+      if (signal?.aborted || (streamError instanceof Error && streamError.name === 'AbortError')) {
+        throw streamError;
+      }
+      // Fallback: if streaming fails ("terminated", connection reset, etc.),
+      // retry without streaming. User won't see live-typing but still gets the report.
+      const msg = streamError instanceof Error ? streamError.message : String(streamError);
+      console.warn(`[pipeline] Writer stream failed (${msg}), retrying without stream`);
+      console.warn(`[pipeline] Writer full error:`, streamError);
+      const writerResult = await run(writerAgent, writerPrompt, { signal });
+      markdown = stripThinkingTags(String(writerResult.finalOutput || '').trim());
+    }
 
     const d2 = +(((Date.now() - t2) / 1000).toFixed(1));
     if (markdown && markdown.length > 50) {
@@ -612,6 +751,10 @@ export async function runAgentPipeline(input: PipelineInput): Promise<{
     console.log(`[pipeline] Writer done (${d2}s): output too short`);
     emit({ stage: 'writer', status: 'failed', duration: d2, detail: 'output too short' });
   } catch (error) {
+    if (signal?.aborted || (error instanceof Error && error.name === 'AbortError')) {
+      console.log('[pipeline] Stage 4 aborted by user');
+      throw error;
+    }
     stages.failedStage = stages.failedStage || 'writer';
     stages.error = stages.error || (error instanceof Error ? error.message : String(error));
     console.log('[pipeline] Writer error:', stages.error);

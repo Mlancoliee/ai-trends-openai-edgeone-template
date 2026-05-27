@@ -85,6 +85,7 @@ export type StreamEvent =
   | { type: 'stage'; stage: StageKey; status: StageStatus; duration?: number; detail?: string }
   | { type: 'items'; phase: ItemPhase; items: TrendItem[] }
   | { type: 'analysis'; categories: AnalystCategoryEvent[]; deepDives?: AnalystDeepDiveEvent[]; keyInsight?: string }
+  | { type: 'progress'; stage: StageKey; tokenCount: number; chars: number }
   | { type: 'token'; delta: string }
   | { type: 'complete'; report: TrendReport }
   | { type: 'error'; detail: string };

@@ -165,6 +165,8 @@ const DEFAULT_WEB_SOURCES = [
   {
     url: 'https://36kr.com/information/AI/',
     source: '36kr',
+    // url: 'https://hellogithub.com/',
+    // source: 'GitHub',
     method: 'browser' as const,
     extractScript: `
       JSON.stringify(

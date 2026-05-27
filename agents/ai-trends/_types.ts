@@ -174,6 +174,8 @@ export type StreamEvent =
   | { type: 'items'; phase: ItemPhase; items: TrendSourceItem[] }
   // Analyst structured output
   | { type: 'analysis'; categories: AnalystCategoryEvent[]; deepDives?: AnalystDeepDiveEvent[]; keyInsight?: string }
+  // In-progress streaming indicator (emitted every few seconds during long LLM calls)
+  | { type: 'progress'; stage: StageKey; tokenCount: number; chars: number }
   // Writer token streaming (Phase 2 — declared now, emitted later)
   | { type: 'token'; delta: string }
   // Terminal events

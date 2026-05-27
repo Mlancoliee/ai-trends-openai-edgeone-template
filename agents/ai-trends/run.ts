@@ -29,6 +29,12 @@ export async function onRequest(context: any): Promise<Response> {
       };
 
       try {
+        // ── Check abort before starting ──
+        if (signal?.aborted) {
+          emit({ stage: 'complete', status: 'done', report: generateFallbackReport([], runId, trigger), stopped: true });
+          return;
+        }
+
         // ── Fetch & Merge ──
         emit({ stage: 'fetch', status: 'running' });
         const sandbox = context?.sandbox ?? null;
@@ -62,6 +68,7 @@ export async function onRequest(context: any): Promise<Response> {
           noNewItems,
           onProgress: emit,
           sandbox: sandbox ?? undefined,
+          signal,
         });
 
         // ── Metadata ──
@@ -84,6 +91,13 @@ export async function onRequest(context: any): Promise<Response> {
         emit({ stage: 'complete', status: 'done', report });
 
       } catch (error) {
+        // ── User-initiated abort — clean exit, no error report ──
+        if (signal?.aborted || (error instanceof Error && error.name === 'AbortError')) {
+          console.log('[run] Pipeline aborted by user');
+          emit({ stage: 'complete', status: 'done', stopped: true });
+          return;
+        }
+
         const message = error instanceof Error ? error.message : String(error);
         emit({ stage: 'error', status: 'failed', detail: message });
 

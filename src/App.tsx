@@ -139,6 +139,19 @@ const IconLayers = (p: IconProps) => (
 const IconDatabase = (p: IconProps) => (
   <Icon {...p}><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" /><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3" /></Icon>
 );
+const IconClock = (p: IconProps) => (
+  <Icon {...p}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></Icon>
+);
+
+function TriggerBadge({ trigger }: { trigger?: string }) {
+  if (trigger === 'schedule') {
+    return <span className={styles.triggerBadge} data-trigger="schedule"><IconClock size={11} /> 定时</span>;
+  }
+  if (trigger === 'manual') {
+    return <span className={styles.triggerBadge} data-trigger="manual"><IconPlay size={11} /> 手动</span>;
+  }
+  return null;
+}
 
 /* ====================================
    Pipeline Bar
@@ -178,18 +191,8 @@ function PipelineBar({
                 {state.duration != null && (
                   <span className={styles.stageDuration}>{state.duration.toFixed(0)}s</span>
                 )}
-                {state.status === 'running' && state.detail && (
-                  <span className={styles.stageDetail}>{state.detail}</span>
-                )}
               </div>
             </div>
-            {state.status === 'running' && (
-              // Indeterminate "scanning" bar — communicates work-in-progress
-              // without claiming a known duration.
-              <div className={styles.stageProgressTrack}>
-                <div className={styles.stageProgressIndeterminate} />
-              </div>
-            )}
           </div>
         );
       })}
@@ -460,25 +463,6 @@ export default function App() {
     return () => { cancelled = true; };
   }, [refresh]);
 
-  // ── DIAGNOSTIC: track visibility changes so we can correlate with [sse] logs ──
-  // Pure observation — remove once root cause of mid-stream disconnect is found.
-  useEffect(() => {
-    const onVisibility = () => {
-      console.log('[vis]', {
-        state: document.visibilityState,
-        timestamp: new Date().toISOString(),
-        perfNow: performance.now().toFixed(0) + 'ms',
-      });
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    // Also log at mount so the first [sse] line has a baseline.
-    console.log('[vis] mount', {
-      state: document.visibilityState,
-      perfNow: performance.now().toFixed(0) + 'ms',
-    });
-    return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, []);
-
   const run = useCallback(async () => {
     activeRunRef.current?.abort();
     const controller = new AbortController();
@@ -714,6 +698,7 @@ export default function App() {
           <p className={styles.eyebrow}>AI Trends Monitor</p>
           <h1>AI 热点汇总</h1>
           <p>按计划采集公开技术资讯，沉淀为可追溯的 AI 趋势报告。</p>
+          <p className={styles.scheduleHint}><IconClock size={12} /> 每日 9:00 自动采集</p>
         </div>
         <div className={styles.topActions}>
           <StatusPill status={displayStatus} />
@@ -917,6 +902,7 @@ export default function App() {
                 <button type="button" className={styles.latestReportCard} onClick={openLatestReport}>
                   <div className={styles.latestReportHeader}>
                     <span className={styles.latestBadge}>最新</span>
+                    <TriggerBadge trigger={safeReport.trigger} />
                     <span>{formatTime(safeReport.generatedAt)}</span>
                   </div>
                   <strong>{safeReport.summary || `${trendCount} 个趋势 · ${newsItems.length} 条资讯`}</strong>
@@ -937,6 +923,7 @@ export default function App() {
                     >
                       <div className={styles.reportItemTop}>
                         <strong>{formatTime(item.generatedAt)}</strong>
+                        <TriggerBadge trigger={item.trigger} />
                         {item.status === 'failed' && <StatusPill status={item.status} />}
                       </div>
                       <p>{item.summary || item.error || '无摘要'}</p>
