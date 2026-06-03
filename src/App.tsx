@@ -42,10 +42,9 @@ const DEFAULT_SOURCES = ['Hacker News', 'Dev.to'];
 
 const PIPELINE_STAGES = [
   { key: 'fetch', label: 'Fetch', labelCn: '采集' },
-  { key: 'curator', label: 'Curator', labelCn: '策展' },
-  { key: 'summarizer', label: 'Summarizer', labelCn: '摘要' },
-  { key: 'analyst', label: 'Analyst', labelCn: '分析' },
-  { key: 'writer', label: 'Writer', labelCn: '撰写' },
+  { key: 'filter', label: 'Filter & Summarize', labelCn: '筛选 & 摘要', parallel: ['curator', 'summarizer'] },
+  { key: 'analyst', label: 'Analyze', labelCn: '分析' },
+  { key: 'writer', label: 'Write', labelCn: '撰写' },
 ] as const;
 
 type StageStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
@@ -156,22 +155,35 @@ function TriggerBadge({ trigger }: { trigger?: string }) {
 /* ====================================
    Pipeline Bar
    ==================================== */
-/* ====================================
-   Pipeline Bar
-   ==================================== */
 function PipelineBar({
   stages,
-  visible,
 }: {
   stages: Record<string, StageState>;
-  visible: boolean;
 }) {
-  if (!visible) return null;
+  // Compute merged stage status for parallel stages (curator + summarizer → filter)
+  const getStageState = (def: typeof PIPELINE_STAGES[number]): StageState => {
+    if ('parallel' in def && def.parallel) {
+      const subs = def.parallel.map(k => stages[k] || { status: 'pending' as StageStatus });
+      if (subs.every(s => s.status === 'done')) {
+        const maxDur = Math.max(...subs.map(s => s.duration ?? 0));
+        return { status: 'done', duration: maxDur };
+      }
+      if (subs.some(s => s.status === 'failed')) return { status: 'failed' };
+      if (subs.some(s => s.status === 'running')) return { status: 'running' };
+      return { status: 'pending' };
+    }
+    return stages[def.key] || { status: 'pending' as StageStatus };
+  };
+
+  // Nothing to show
+  const hasAnyActivity = Object.keys(stages).length > 0;
+  if (!hasAnyActivity) return null;
+
   return (
     <div className={styles.pipelineBar}>
       {PIPELINE_STAGES.map((def, i) => {
-        const state = stages[def.key] || { status: 'pending' as StageStatus };
-        const prevState = i > 0 ? (stages[PIPELINE_STAGES[i - 1].key] || { status: 'pending' as StageStatus }) : null;
+        const state = getStageState(def);
+        const prevState = i > 0 ? getStageState(PIPELINE_STAGES[i - 1]) : null;
         return (
           <div key={def.key} className={styles.pipelineStageWrap}>
             {i > 0 && (
@@ -186,8 +198,7 @@ function PipelineBar({
                 {state.status === 'running' && <span className={styles.stagePulse} />}
               </div>
               <div className={styles.stageInfo}>
-                <span className={styles.stageName}>{def.label}</span>
-                <span className={styles.stageLabel}>{def.labelCn}</span>
+                <span className={styles.stageName}>{def.labelCn}</span>
                 {state.duration != null && (
                   <span className={styles.stageDuration}>{state.duration.toFixed(0)}s</span>
                 )}
@@ -205,10 +216,10 @@ function PipelineBar({
    ==================================== */
 const LIVE_PHASE_HINT: Record<LivePhase, string> = {
   idle: '准备开始...',
-  fetched: '已采集到候选资讯，正在交给 AI 策展中...',
-  curated: 'AI 已筛选有价值的内容，正在生成中文摘要...',
-  summarized: '摘要完成，正在做趋势分析与分类...',
-  analyzed: '分类完成，正在撰写最终报告...',
+  fetched: '已采集到候选资讯，正在筛选 & 摘要...',
+  curated: '已筛选有价值的内容，正在生成摘要...',
+  summarized: '筛选 & 摘要完成，正在做趋势分析...',
+  analyzed: '分析完成，正在撰写最终报告...',
   writing: '正在撰写报告，即将完成...',
   done: '报告已就绪',
 };
@@ -366,15 +377,6 @@ function SkeletonReportItem() {
       <div className={`${styles.skeletonShimmer} ${styles.skeletonLine}`} style={{ width: '95%' }} />
       <div className={`${styles.skeletonShimmer} ${styles.skeletonLine}`} style={{ width: '40%' }} />
     </div>
-  );
-}
-
-function SkeletonStat() {
-  return (
-    <article className={styles.skeletonStat}>
-      <div className={`${styles.skeletonShimmer} ${styles.skeletonLine}`} style={{ width: '60px' }} />
-      <div className={`${styles.skeletonShimmer} ${styles.skeletonLine}`} style={{ width: '80px', height: '20px' }} />
-    </article>
   );
 }
 
@@ -607,6 +609,18 @@ export default function App() {
     activeRunRef.current?.abort();
     activeRunRef.current = null;
     setLoading(false);
+    // Mark any running stages as skipped
+    setPipelineStages(prev => {
+      const next = { ...prev };
+      for (const key of Object.keys(next)) {
+        if (next[key].status === 'running') {
+          next[key] = { ...next[key], status: 'skipped' };
+        }
+      }
+      return next;
+    });
+    setLivePhase('done');
+    setLiveWriterText('');
     await stopReport();
   }, []);
 
@@ -680,7 +694,6 @@ export default function App() {
   }, [streamingDrawerOpen, liveWriterText]);
 
   const safeReport = normalizeReport(report);
-  const displayStatus = loading ? 'running' : safeReport.status;
   const newsItems = safeReport.items;
   const newItems = useMemo(() => newsItems.filter(item => item.isNew), [newsItems]);
   const recurringItems = useMemo(() => newsItems.filter(item => !item.isNew), [newsItems]);
@@ -701,51 +714,34 @@ export default function App() {
           <p className={styles.scheduleHint}><IconClock size={12} /> 每日 9:00 自动采集</p>
         </div>
         <div className={styles.topActions}>
-          <StatusPill status={displayStatus} />
           <button className={styles.primaryButton} onClick={run} disabled={loading}>
             {loading ? (
               <><span className={styles.btnSpinner} /> 生成中...</>
             ) : (
-              <><IconPlay className={styles.btnIcon} /> 立即生成</>
+              <><IconPlay className={styles.btnIcon} /> 手动生成</>
             )}
           </button>
-          <button className={styles.secondaryButton} onClick={stop}>
-            <IconStop className={styles.btnIcon} /> 停止
-          </button>
+          {loading && (
+            <button className={styles.secondaryButton} onClick={stop}>
+              <IconStop className={styles.btnIcon} /> 停止
+            </button>
+          )}
         </div>
       </header>
 
-      <PipelineBar stages={pipelineStages} visible={loading} />
+      <PipelineBar stages={pipelineStages} />
 
-      <section className={styles.summaryStrip}>
-        {bootstrapping ? (
-          <>
-            <SkeletonStat />
-            <SkeletonStat />
-            <SkeletonStat />
-            <SkeletonStat />
-          </>
-        ) : (
-          <>
-            <article>
-              <span>资讯条目</span>
-              <strong>{safeReport.itemCount ?? newsItems.length}</strong>
-            </article>
-            <article>
-              <span>趋势主题</span>
-              <strong>{trendCount}</strong>
-            </article>
-            <article>
-              <span>数据源</span>
-              <strong>{sourceNames}</strong>
-            </article>
-            <article>
-              <span>最近生成</span>
-              <strong>{formatTime(safeReport.generatedAt)}</strong>
-            </article>
-          </>
-        )}
-      </section>
+      {!bootstrapping && (
+        <div className={styles.statsBar}>
+          <span className={styles.statItem}><strong>{safeReport.itemCount ?? newsItems.length}</strong> 条资讯</span>
+          <span className={styles.statDot}>·</span>
+          <span className={styles.statItem}><strong>{trendCount}</strong> 个主题</span>
+          <span className={styles.statDot}>·</span>
+          <span className={styles.statItem}>最近生成 <strong>{formatTime(safeReport.generatedAt)}</strong></span>
+          <span className={styles.statDot}>·</span>
+          <span className={styles.statItem}>源 {sourceNames}</span>
+        </div>
+      )}
 
       <section className={styles.mainLayout}>
         {/* Main: News Feed */}
@@ -898,7 +894,7 @@ export default function App() {
               )}
 
               {/* Latest report quick card */}
-              {safeReport.status === 'success' && livePhase !== 'writing' && (
+              {safeReport.status === 'success' && (
                 <button type="button" className={styles.latestReportCard} onClick={openLatestReport}>
                   <div className={styles.latestReportHeader}>
                     <span className={styles.latestBadge}>最新</span>
