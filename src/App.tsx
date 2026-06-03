@@ -733,11 +733,11 @@ export default function App() {
 
       {!bootstrapping && (
         <div className={styles.statsBar}>
+          <span className={styles.statItem}>最近生成 <strong>{formatTime(safeReport.generatedAt)}</strong></span>
+          <span className={styles.statDot}>·</span>
           <span className={styles.statItem}><strong>{safeReport.itemCount ?? newsItems.length}</strong> 条资讯</span>
           <span className={styles.statDot}>·</span>
           <span className={styles.statItem}><strong>{trendCount}</strong> 个主题</span>
-          <span className={styles.statDot}>·</span>
-          <span className={styles.statItem}>最近生成 <strong>{formatTime(safeReport.generatedAt)}</strong></span>
           <span className={styles.statDot}>·</span>
           <span className={styles.statItem}>源 {sourceNames}</span>
         </div>
