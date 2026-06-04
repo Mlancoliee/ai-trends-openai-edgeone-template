@@ -44,24 +44,57 @@ function stripThinkingTags(text: string): string {
 function parseJsonFromText<T>(text: string): T | null {
   // Strip thinking tags first — some models prepend <think>...</think> before JSON
   const cleaned = stripThinkingTags(text);
+
+  // Helper: fix common JSON issues (trailing commas, etc.)
+  function tryParse(json: string): T | null {
+    // Direct attempt
+    try { return JSON.parse(json) as T; } catch { /* continue */ }
+    // Fix trailing commas: ,] or ,}
+    const fixed = json
+      .replace(/,\s*([}\]])/g, '$1')
+      .replace(/,\s*$/g, '');
+    try { return JSON.parse(fixed) as T; } catch { /* continue */ }
+    // Try to fix truncated JSON by closing brackets
+    let attempt = fixed;
+    const opens = (attempt.match(/[{[]/g) || []).length;
+    const closes = (attempt.match(/[}\]]/g) || []).length;
+    for (let i = 0; i < opens - closes; i++) {
+      // Determine which bracket to close
+      const lastOpen = Math.max(attempt.lastIndexOf('{'), attempt.lastIndexOf('['));
+      attempt += attempt[lastOpen] === '{' ? '}' : ']';
+    }
+    try { return JSON.parse(attempt) as T; } catch { /* continue */ }
+    return null;
+  }
+
   // Try direct parse
-  try {
-    return JSON.parse(cleaned) as T;
-  } catch { /* continue */ }
+  const direct = tryParse(cleaned);
+  if (direct) return direct;
+
   // Try extracting JSON block from markdown code fence
   const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
   if (fenceMatch) {
-    try { return JSON.parse(fenceMatch[1]) as T; } catch { /* continue */ }
+    const result = tryParse(fenceMatch[1]);
+    if (result) return result;
   }
   // Try extracting first { ... } or [ ... ]
   const objMatch = cleaned.match(/\{[\s\S]*\}/);
   if (objMatch) {
-    try { return JSON.parse(objMatch[0]) as T; } catch { /* continue */ }
+    const result = tryParse(objMatch[0]);
+    if (result) return result;
   }
   const arrMatch = cleaned.match(/\[[\s\S]*\]/);
   if (arrMatch) {
-    try { return JSON.parse(arrMatch[0]) as T; } catch { /* continue */ }
+    const result = tryParse(arrMatch[0]);
+    if (result) return result;
   }
+  // Last resort: find the first { and try to parse from there (handles preamble text)
+  const firstBrace = cleaned.indexOf('{');
+  if (firstBrace > 0) {
+    const result = tryParse(cleaned.slice(firstBrace));
+    if (result) return result;
+  }
+  console.warn('[parseJson] all attempts failed, first 200 chars:', cleaned.slice(0, 200));
   return null;
 }
 

@@ -22,7 +22,7 @@
   "schedules": [
     {
       "name": "ai-trends-periodic",
-      "cron": "40 14 * * *",
+      "cron": "0 9 * * *",
       "path": "/ai-trends/run",
       "payload": {
         "_schedule": true,

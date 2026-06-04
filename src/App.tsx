@@ -758,7 +758,7 @@ export default function App() {
 
           <div className={styles.filterRow}>
             <div className={styles.sourceList}>
-              {DEFAULT_SOURCES.map(source => <span key={source}>{source}</span>)}
+              {(sourceNames.split(' / ')).map(source => <span key={source}>{source}</span>)}
             </div>
             <div className={styles.topicGrid}>
               {TOPICS.map(topic => <span key={topic}>{topic}</span>)}
