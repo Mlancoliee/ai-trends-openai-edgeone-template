@@ -504,8 +504,8 @@
 .reportSidebar {
   position: sticky;
   top: 180px;
-  max-height: calc(100vh - 235px);
-  overflow: hidden;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
@@ -1451,10 +1451,10 @@
    ==================================== */
 .miniTypingCard {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   width: calc(100% - 24px);
   margin: 12px auto 0;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border: 1px solid #fcd34d;
   border-radius: 16px;
   color: inherit;
@@ -1465,6 +1465,7 @@
   transition: border-color 180ms ease, box-shadow 180ms ease, transform 120ms ease;
   position: relative;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .miniTypingCard::before {
@@ -1517,7 +1518,7 @@
 
 .miniTypingPreview {
   position: relative;
-  height: 64px;
+  height: 44px;
   overflow: hidden;
   font-size: 12px;
   line-height: 1.55;
