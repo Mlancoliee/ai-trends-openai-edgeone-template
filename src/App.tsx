@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode, SVGProps } from 'react';
 import { fetchHistory, fetchLatest, fetchReportDetail, runReportSSE, stopReport, deleteReport } from './api';
+import { useI18n } from './i18n';
 import MarkdownReport from './MarkdownReport';
 import { EMPTY_REPORT, normalizeReport } from './reportModel';
 import type { AnalystCategoryEvent, AnalystDeepDiveEvent, HistoryEntry, ItemPhase, PipelineEvent, TrendItem, TrendReport } from './types';
 import styles from './App.module.css';
 
-function formatTime(value?: string): string {
-  if (!value) return '尚未生成';
-  return new Intl.DateTimeFormat('zh-CN', {
+function formatTime(value?: string, locale = 'zh-CN'): string {
+  if (!value) return '';
+  return new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en-US', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -17,12 +18,13 @@ function formatTime(value?: string): string {
 }
 
 function StatusPill({ status }: { status?: string }) {
+  const { t } = useI18n();
   const normalized = status || 'empty';
   const labels: Record<string, string> = {
-    empty: '待生成',
-    running: '生成中',
-    success: '已完成',
-    failed: '失败',
+    empty: t('statusEmpty'),
+    running: t('statusRunning'),
+    success: t('statusSuccess'),
+    failed: t('statusFailed'),
   };
   return <span className={`${styles.status} ${styles[`status_${normalized}`] ?? ''}`}>{labels[normalized] ?? normalized}</span>;
 }
@@ -143,11 +145,12 @@ const IconClock = (p: IconProps) => (
 );
 
 function TriggerBadge({ trigger }: { trigger?: string }) {
+  const { t } = useI18n();
   if (trigger === 'schedule') {
-    return <span className={styles.triggerBadge} data-trigger="schedule"><IconClock size={11} /> 定时</span>;
+    return <span className={styles.triggerBadge} data-trigger="schedule"><IconClock size={11} /> {t('triggerSchedule')}</span>;
   }
   if (trigger === 'manual') {
-    return <span className={styles.triggerBadge} data-trigger="manual"><IconPlay size={11} /> 手动</span>;
+    return <span className={styles.triggerBadge} data-trigger="manual"><IconPlay size={11} /> {t('triggerManual')}</span>;
   }
   return null;
 }
@@ -160,6 +163,7 @@ function PipelineBar({
 }: {
   stages: Record<string, StageState>;
 }) {
+  const { locale } = useI18n();
   // Compute merged stage status for parallel stages (curator + summarizer → filter)
   const getStageState = (def: typeof PIPELINE_STAGES[number]): StageState => {
     if ('parallel' in def && def.parallel) {
@@ -198,7 +202,7 @@ function PipelineBar({
                 {state.status === 'running' && <span className={styles.stagePulse} />}
               </div>
               <div className={styles.stageInfo}>
-                <span className={styles.stageName}>{def.labelCn}</span>
+                <span className={styles.stageName}>{locale === 'zh' ? def.labelCn : def.label}</span>
                 {state.duration != null && (
                   <span className={styles.stageDuration}>{state.duration.toFixed(0)}s</span>
                 )}
@@ -214,14 +218,14 @@ function PipelineBar({
 /* ====================================
    Live Feed (during generation)
    ==================================== */
-const LIVE_PHASE_HINT: Record<LivePhase, string> = {
-  idle: '准备开始...',
-  fetched: '已采集到候选资讯，正在筛选 & 摘要...',
-  curated: '已筛选有价值的内容，正在生成摘要...',
-  summarized: '筛选 & 摘要完成，正在做趋势分析...',
-  analyzed: '分析完成，正在撰写最终报告...',
-  writing: '正在撰写报告，即将完成...',
-  done: '报告已就绪',
+const LIVE_PHASE_KEYS: Record<LivePhase, string> = {
+  idle: 'phaseIdle',
+  fetched: 'phaseFetched',
+  curated: 'phaseCurated',
+  summarized: 'phaseSummarized',
+  analyzed: 'phaseAnalyzed',
+  writing: 'phaseWriting',
+  done: 'phaseDone',
 };
 
 function LiveFeed({
@@ -233,6 +237,8 @@ function LiveFeed({
   phase: LivePhase;
   analysis: { categories: AnalystCategoryEvent[]; deepDives?: AnalystDeepDiveEvent[]; keyInsight?: string } | null;
 }) {
+  const { t } = useI18n();
+  const phaseHint = t(LIVE_PHASE_KEYS[phase] as any);
   // Group items by analyst category once analysis arrives; otherwise show flat list.
   const grouped = useMemo(() => {
     if (!analysis || !analysis.categories?.length) return null;
@@ -255,7 +261,7 @@ function LiveFeed({
     <div className={styles.liveFeed}>
       <div className={styles.livePhaseBanner}>
         <span className={styles.livePhasePulse} />
-        <span>{analysis?.keyInsight || LIVE_PHASE_HINT[phase]}</span>
+        <span>{analysis?.keyInsight || phaseHint}</span>
       </div>
 
       {grouped ? (
@@ -314,14 +320,13 @@ function LiveItemCard({ item }: { item: LiveItem }) {
    Mini Typing Card (sidebar, Writer streaming)
    ==================================== */
 function MiniTypingCard({ text, onClick }: { text: string; onClick: () => void }) {
-  // Show only the tail of the streaming text so the preview "rises" from the
-  // bottom of the card as new tokens arrive (mask-image fades the top).
+  const { t } = useI18n();
   const tail = text.slice(-220);
   return (
     <button type="button" className={styles.miniTypingCard} onClick={onClick}>
       <div className={styles.miniTypingHeader}>
         <span className={styles.miniTypingDot} />
-        <span>正在撰写报告</span>
+        <span>{t('writingReport')}</span>
       </div>
       <div className={styles.miniTypingPreview}>
         <div className={styles.miniTypingPreviewInner}>
@@ -330,8 +335,8 @@ function MiniTypingCard({ text, onClick }: { text: string; onClick: () => void }
         </div>
       </div>
       <div className={styles.miniTypingFooter}>
-        <span>{text.length} 字</span>
-        <span>点击展开 →</span>
+        <span>{text.length} {t('chars')}</span>
+        <span>{t('expandClick')}</span>
       </div>
     </button>
   );
@@ -420,6 +425,7 @@ function OnboardingHero({ onStart, loading }: { onStart: () => void; loading: bo
    Main App
    ==================================== */
 export default function App() {
+  const { t, locale, toggleLocale } = useI18n();
   const [report, setReport] = useState<TrendReport>(EMPTY_REPORT);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -655,7 +661,7 @@ export default function App() {
 
   const handleDelete = useCallback(async (runId?: string) => {
     if (!runId) return;
-    if (!confirm('确定删除这份报告？')) return;
+    if (!confirm(t('confirmDelete'))) return;
     const success = await deleteReport(runId);
     if (success) {
       setHistory(prev => prev.filter(item => item.runId !== runId));
@@ -706,24 +712,27 @@ export default function App() {
 
   return (
     <main className={styles.shell}>
+      <button className={styles.langToggle} onClick={toggleLocale} title={locale === 'zh' ? 'Switch to English' : '切换为中文'}>
+        {locale === 'zh' ? 'EN' : '中'}
+      </button>
       <header className={styles.topbar}>
         <div className={styles.brandBlock}>
-          <p className={styles.eyebrow}>AI Trends Monitor</p>
-          <h1>AI 热点汇总</h1>
-          <p>按计划采集公开技术资讯，沉淀为可追溯的 AI 趋势报告。</p>
-          <p className={styles.scheduleHint}><IconClock size={12} /> 每日 9:00 自动采集</p>
+          <p className={styles.eyebrow}>{t('eyebrow')}</p>
+          <h1>{t('title')}</h1>
+          <p>{t('subtitle')}</p>
+          <p className={styles.scheduleHint}><IconClock size={12} /> {t('scheduleHint')}</p>
         </div>
         <div className={styles.topActions}>
           <button className={styles.primaryButton} onClick={run} disabled={loading}>
             {loading ? (
-              <><span className={styles.btnSpinner} /> 生成中...</>
+              <><span className={styles.btnSpinner} /> {t('generating')}</>
             ) : (
-              <><IconPlay className={styles.btnIcon} /> 手动生成</>
+              <><IconPlay className={styles.btnIcon} /> {t('generate')}</>
             )}
           </button>
           {loading && (
             <button className={styles.secondaryButton} onClick={stop}>
-              <IconStop className={styles.btnIcon} /> 停止
+              <IconStop className={styles.btnIcon} /> {t('stop')}
             </button>
           )}
         </div>
@@ -733,13 +742,13 @@ export default function App() {
 
       {!bootstrapping && (
         <div className={styles.statsBar}>
-          <span className={styles.statItem}>最近生成 <strong>{formatTime(safeReport.generatedAt)}</strong></span>
+          <span className={styles.statItem}>{t('lastGenerated')} <strong>{formatTime(safeReport.generatedAt, locale) || t('noTime')}</strong></span>
           <span className={styles.statDot}>·</span>
-          <span className={styles.statItem}><strong>{safeReport.itemCount ?? newsItems.length}</strong> 条资讯</span>
+          <span className={styles.statItem}><strong>{safeReport.itemCount ?? newsItems.length}</strong> {t('items')}</span>
           <span className={styles.statDot}>·</span>
-          <span className={styles.statItem}><strong>{trendCount}</strong> 个主题</span>
+          <span className={styles.statItem}><strong>{trendCount}</strong> {t('topics')}</span>
           <span className={styles.statDot}>·</span>
-          <span className={styles.statItem}>源 {sourceNames}</span>
+          <span className={styles.statItem}>{t('source')} {sourceNames}</span>
         </div>
       )}
 
@@ -748,11 +757,11 @@ export default function App() {
         <section className={styles.contentPanel}>
           <div className={styles.feedHeader}>
             <div>
-              <p className={styles.panelLabel}>News Feed</p>
-              <h2 className={styles.feedTitle}>资讯流</h2>
+              <p className={styles.panelLabel}>{t('feedLabel')}</p>
+              <h2 className={styles.feedTitle}>{t('feedTitle')}</h2>
             </div>
             <button className={styles.ghostButton} onClick={refresh}>
-              <IconRefresh className={styles.btnIcon} /> 刷新
+              <IconRefresh className={styles.btnIcon} /> {t('refresh')}
             </button>
           </div>
 
@@ -779,7 +788,7 @@ export default function App() {
             <div className={styles.newsList}>
               {safeReport.newItemCount === 0 && safeReport.status === 'success' && (
                 <div className={styles.noNewBanner}>
-                  本次未发现新的 AI 动态，以下为最近仍值得关注的资讯。
+                  {t('noNewBanner')}
                 </div>
               )}
 
@@ -787,7 +796,7 @@ export default function App() {
                 <>
                   <div className={styles.feedGroupHeader}>
                     <IconSparkle />
-                    <span>新增资讯</span>
+                    <span>{t('newItems')}</span>
                     <span className={styles.feedGroupBadge}>{newItems.length}</span>
                   </div>
                   {newItems.map(item => (
@@ -811,7 +820,7 @@ export default function App() {
                         <span>{item.category || 'AI'}</span>
                         <span>score {item.score ?? 0}</span>
                         <span>
-                          源站 <IconExternal size={11} style={{ verticalAlign: '-1px', marginLeft: 2 }} />
+                          {t('sourceLabel')} <IconExternal size={11} style={{ verticalAlign: '-1px', marginLeft: 2 }} />
                         </span>
                       </div>
                     </a>
@@ -823,7 +832,7 @@ export default function App() {
                 <>
                   <div className={`${styles.feedGroupHeader} ${styles.recurring}`}>
                     <IconHistory />
-                    <span>持续关注</span>
+                    <span>{t('recurring')}</span>
                     <span className={styles.feedGroupBadge}>{recurringItems.length}</span>
                   </div>
                   {recurringItems.map(item => (
@@ -847,7 +856,7 @@ export default function App() {
                         <span>{item.category || 'AI'}</span>
                         <span>score {item.score ?? 0}</span>
                         <span>
-                          源站 <IconExternal size={11} style={{ verticalAlign: '-1px', marginLeft: 2 }} />
+                          {t('sourceLabel')} <IconExternal size={11} style={{ verticalAlign: '-1px', marginLeft: 2 }} />
                         </span>
                       </div>
                     </a>
@@ -856,7 +865,7 @@ export default function App() {
               )}
 
               {!newsItems.length && (
-                <p className={styles.emptyText}>暂无资讯明细，点击"立即生成"后会在这里展示。</p>
+                <p className={styles.emptyText}>{t('emptyFeed')}</p>
               )}
             </div>
           )}
@@ -866,11 +875,11 @@ export default function App() {
         <aside className={styles.reportSidebar}>
           <div className={styles.sidebarHeader}>
             <div>
-              <p className={styles.panelLabel}>Trend Reports</p>
-              <h2 className={styles.sidebarTitle}>趋势报告</h2>
+              <p className={styles.panelLabel}>{t('reportsLabel')}</p>
+              <h2 className={styles.sidebarTitle}>{t('reportsTitle')}</h2>
             </div>
             <span className={styles.reportHint}>
-              {bootstrapping ? '—' : `${history.length} 份`}
+              {bootstrapping ? '—' : `${history.length} ${t('reportCount')}`}
             </span>
           </div>
 
@@ -897,13 +906,13 @@ export default function App() {
               {safeReport.status === 'success' && (
                 <button type="button" className={styles.latestReportCard} onClick={openLatestReport}>
                   <div className={styles.latestReportHeader}>
-                    <span className={styles.latestBadge}>最新</span>
+                    <span className={styles.latestBadge}>{t('latest')}</span>
                     <TriggerBadge trigger={safeReport.trigger} />
-                    <span>{formatTime(safeReport.generatedAt)}</span>
+                    <span>{formatTime(safeReport.generatedAt, locale)}</span>
                   </div>
-                  <strong>{safeReport.summary || `${trendCount} 个趋势 · ${newsItems.length} 条资讯`}</strong>
+                  <strong>{safeReport.summary || `${trendCount} ${t('topics')} · ${newsItems.length} ${t('items')}`}</strong>
                   <span className={styles.viewReportLink}>
-                    查看完整报告 <IconArrowRight size={13} style={{ verticalAlign: '-2px', marginLeft: 2 }} />
+                    {t('viewReport')} <IconArrowRight size={13} style={{ verticalAlign: '-2px', marginLeft: 2 }} />
                   </span>
                 </button>
               )}
@@ -918,21 +927,21 @@ export default function App() {
                       onClick={() => openReport(item.runId)}
                     >
                       <div className={styles.reportItemTop}>
-                        <strong>{formatTime(item.generatedAt)}</strong>
+                        <strong>{formatTime(item.generatedAt, locale)}</strong>
                         <TriggerBadge trigger={item.trigger} />
                         {item.status === 'failed' && <StatusPill status={item.status} />}
                       </div>
-                      <p>{item.summary || item.error || '无摘要'}</p>
+                      <p>{item.summary || item.error || t('noSummary')}</p>
                       <div className={styles.reportItemMeta}>
-                        {item.itemCount != null && <span>{item.itemCount} 条资讯</span>}
-                        {item.newItemCount != null && <span>{item.newItemCount} 条新增</span>}
+                        {item.itemCount != null && <span>{item.itemCount} {t('items')}</span>}
+                        {item.newItemCount != null && <span>{item.newItemCount} {locale === 'zh' ? '条新增' : 'new'}</span>}
                       </div>
                     </button>
                     <button
                       type="button"
                       className={styles.deleteButton}
-                      title="删除报告"
-                      aria-label="删除报告"
+                      title={t('deleteReport')}
+                      aria-label={t('deleteReport')}
                       onClick={(e) => { e.stopPropagation(); handleDelete(item.runId); }}
                     >
                       <IconX size={13} />
@@ -942,8 +951,8 @@ export default function App() {
                 {!history.filter(item => item.runId !== safeReport.runId).length && safeReport.status !== 'success' && (
                   <div className={styles.sidebarEmpty}>
                     <IconBookmark />
-                    <p className={styles.sidebarEmptyText}>暂无历史报告</p>
-                    <p className={styles.sidebarEmptyHint}>生成后会在这里保留</p>
+                    <p className={styles.sidebarEmptyText}>{t('noHistory')}</p>
+                    <p className={styles.sidebarEmptyHint}>{t('noHistoryHint')}</p>
                   </div>
                 )}
                 {!history.filter(item => item.runId !== safeReport.runId).length && safeReport.status === 'success' && (
@@ -966,11 +975,11 @@ export default function App() {
       <aside className={`${styles.drawer} ${drawerOpen ? styles.drawerOpen : ''}`}>
         <div className={styles.drawerHeader}>
           <div>
-            <p className={styles.panelLabel}>{streamingDrawerOpen ? 'Live Writing' : 'Full Report'}</p>
+            <p className={styles.panelLabel}>{streamingDrawerOpen ? t('liveWriting') : t('fullReport')}</p>
             <h2 className={styles.drawerTitle}>
               {streamingDrawerOpen
-                ? '正在撰写报告...'
-                : drawerReport?.generatedAt ? formatTime(drawerReport.generatedAt) : '趋势报告'}
+                ? t('writingTitle')
+                : drawerReport?.generatedAt ? formatTime(drawerReport.generatedAt, locale) : t('reportTitle')}
             </h2>
           </div>
           <button type="button" className={styles.drawerClose} onClick={closeDrawer} aria-label="关闭">
