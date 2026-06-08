@@ -196,18 +196,17 @@ function createCuratorAgent(env: Record<string, string | undefined>) {
   return new Agent({
     name: 'CuratorAgent',
     instructions: [
-      '你是 AI 趋势策展专家。从原始候选内容中筛选、分类和评分。',
+      '你是 AI 趋势策展专家。从原始候选内容中筛选和分类。',
       '',
       '策展标准：',
       '1. 只保留与 AI Agent、LLM、多模态、开源模型、AI Infra、AI 产品直接相关的内容；',
       '2. 排除纯招聘帖、营销软文、重复/低质量内容；',
       '3. 为每条内容重新判定 category（AI Agent / LLM / Multimodal / Open Source Model / AI Infra / AI Industry）；',
-      '4. relevance 评分 0-10（0=完全无关，10=重大突破）；',
-      '5. keep=true 表示保留，keep=false 表示丢弃；',
-      '6. reason 简述保留或丢弃原因（中文）。',
+      '4. keep=true 表示保留，keep=false 表示丢弃；',
+      '5. reason 简述保留或丢弃原因（中文）。',
       '',
       '你必须只输出 JSON，格式如下（不要包含其他文字）：',
-      '{"items":[{"id":"...","title":"...","url":"...","category":"...","relevance":8,"reason":"...","keep":true}],"droppedCount":5,"curatorNotes":"..."}',
+      '{"items":[{"id":"...","title":"...","url":"...","category":"...","reason":"...","keep":true}],"droppedCount":5,"curatorNotes":"..."}',
     ].join('\n'),
     model: createModel(env),
   });
@@ -262,7 +261,9 @@ function createAnalystAgent(
       '6. 使用 fetch_url 时限制在最重要的 2-3 篇，不要对每条都调用；',
       '',
       '最终你必须只输出 JSON（不要包含其他文字），格式如下：',
-      '{"categories":[{"name":"AI Agent","items":[{"id":"...","title":"...","status":"new|active|single","importance":"high|medium|low"}]}],"deepDives":[{"id":"...","title":"...","insight":"一句话分析"}],"keyInsight":"一段综合性核心洞察（不超过80字）"}',
+      '{"categories":[{"name":"AI Agent","items":[{"id":"...","title":"...","status":"new|active|single","importance":"high|medium|low"}]}],"deepDives":[{"id":"...","title":"...","insight":"一句话分析"}],"keyInsight":"一段综合性核心洞察（不超过80字）","scores":[{"id":"...","score":82}]}',
+      '',
+      '其中 scores 是为每条保留的资讯打的综合推荐分（0-100），每条都必须有。',
     ].join('\n'),
     model: createModel(env),
     tools,
@@ -319,7 +320,8 @@ function buildItemsJson(items: TrendSourceItem[]): string {
   return JSON.stringify(items.slice(0, 30).map(item => ({
     id: item.id, title: item.title, url: item.url,
     source: item.source, category: item.category,
-    score: item.score, summary: item.summary,
+    sourceScore: item.score ?? 0, // 源站真实互动数据（HN upvotes / DevTo reactions / 0=无数据）
+    summary: item.summary,
     isNew: item.isNew ?? false, seenCount: item.seenCount ?? 1,
   })));
 }
@@ -330,6 +332,18 @@ function buildAnalystPrompt(items: TrendSourceItem[], noNewItems?: boolean): str
     '先使用 get_history_items 工具获取历史数据，判断哪些条目是持续活跃的。',
     '然后选择 2-3 个最重要的条目使用 fetch_url 深入了解。',
     '最后输出分析结果 JSON。',
+    '',
+    '【重要】你必须为每条保留的资讯打一个 0-100 的综合推荐分（scores 字段）：',
+    '  - 热度（30%）：参考 sourceScore（源站真实互动数据）+ 话题讨论量。sourceScore=0 表示无互动数据，需依据标题/内容判断。',
+    '  - 质量（40%）：原创深度内容、首发消息、技术突破 > 二手转述 > 营销软文。你已通过 fetch_url 阅读部分文章，请据此判断内容深度。',
+    '  - 相关度（30%）：与 AI 核心话题（Agent/LLM/多模态/开源模型/Infra）的直接贴合程度。',
+    '',
+    '评分参考：',
+    '  95-100: 划时代事件（如 GPT-5 发布）',
+    '  80-94: 重大进展/深度首发（如新模型开源、重要论文）',
+    '  65-79: 值得关注的行业动态/技术博客',
+    '  50-64: 一般性资讯/二手转述',
+    '  <50: 边缘相关（通常已被 Curator 过滤）',
     '',
   ];
   if (noNewItems) {
@@ -658,24 +672,35 @@ export async function runAgentPipeline(input: PipelineInput): Promise<{
     const raw = String(analystResult.finalOutput || '');
     const parsed = parseJsonFromText<TrendAnalysis>(raw);
     const d1 = +(((Date.now() - t1) / 1000).toFixed(1));
-    if (parsed?.keyInsight) {
+    if (parsed?.keyInsight || parsed?.categories?.length) {
       analysis = parsed;
       stages.analystOutput = analysis;
+      // Write back Analyst scores (0-100) to enrichedItems for sorting and display.
+      if (analysis.scores?.length) {
+        const scoreMap = new Map(analysis.scores.map(s => [s.id, s.score]));
+        enrichedItems = enrichedItems.map(item => {
+          const aiScore = scoreMap.get(item.id);
+          return aiScore != null ? { ...item, score: aiScore } : item;
+        });
+      }
       const categoryCount = analysis.categories?.length || 0;
       const deepDiveCount = analysis.deepDives?.length || 0;
       const detail = `${categoryCount} categories, ${deepDiveCount} deep dives`;
       console.log(`[pipeline] Analyst done (${d1}s): ${detail}`);
       emit({ stage: 'analyst', status: 'done', duration: d1, detail });
-      // Phase 4 of progressive content: emit categories so frontend can
-      // re-group the visible items by category and show the keyInsight.
+      // Phase 4 of progressive content: emit categories + scored items so
+      // frontend can re-group, show keyInsight, and update displayed scores.
       emit({
         type: 'analysis',
         categories: analysis.categories || [],
         deepDives: analysis.deepDives || [],
         keyInsight: analysis.keyInsight,
       });
+      // Re-emit items with Analyst scores so frontend LiveFeed picks up 0-100 scores.
+      emit({ type: 'items', phase: 'summarized', items: enrichedItems });
     } else {
       console.log(`[pipeline] Analyst done (${d1}s): output parse failed`);
+      console.log(`[pipeline] Analyst raw output (first 500 chars):`, raw.slice(0, 500));
       emit({ stage: 'analyst', status: 'failed', duration: d1, detail: 'parse failed' });
     }
   } catch (error) {

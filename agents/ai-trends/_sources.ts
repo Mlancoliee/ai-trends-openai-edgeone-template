@@ -262,7 +262,7 @@ export async function collectFromWeb(
             source: ws.source,
             title: cleanText(raw.title),
             url: raw.url.startsWith('http') ? raw.url : new URL(raw.url, ws.url).href,
-            score: raw.score ?? Math.max(1, limit - i),
+            score: raw.score ?? 0, // Web 源无真实互动数据，Agent 会根据内容综合打分
             publishedAt: nowIso(),
             summary: raw.summary || '',
           });

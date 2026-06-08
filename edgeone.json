@@ -7,10 +7,6 @@
     }
   },
   "agents": {
-    "scene": ["task"],
-    "tags": ["OpenAI Agents SDK", "Node.js", "定时任务", "趋势分析", "沙箱浏览器"],
-    "runtime": "node",
-    "slug": "ai-trends-scheduled-openai-edgeone-template",
     "framework": "openai-agents-sdk",
     "timeout": 1200
   },

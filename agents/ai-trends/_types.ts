@@ -68,7 +68,6 @@ export const CuratedItemSchema = z.object({
   url: z.string(),
   source: z.string().optional(),
   category: z.string().describe('AI Agent / LLM / Multimodal / Open Source Model / AI Infra / AI Industry'),
-  relevance: z.number().describe('0-10 relevance score'),
   reason: z.string().describe('Brief reason for keep/drop decision (Chinese)'),
   keep: z.boolean().describe('true to include, false to drop'),
 });
@@ -116,6 +115,10 @@ export const TrendAnalysisSchema = z.object({
   categories: z.array(AnalystCategorySchema),
   deepDives: z.array(DeepDiveSchema).optional(),
   keyInsight: z.string().describe('Core insight in under 80 chars (Chinese)'),
+  scores: z.array(z.object({
+    id: z.string(),
+    score: z.number().describe('0-100 综合推荐分'),
+  })).describe('每条保留资讯的综合推荐评分（0-100）'),
 });
 export type TrendAnalysis = z.infer<typeof TrendAnalysisSchema>;
 

@@ -272,17 +272,17 @@ function LiveFeed({
               <span>{group.name}</span>
               <span className={styles.feedGroupBadge}>{group.items.length}</span>
             </div>
-            {group.items.map(item => <LiveItemCard key={item.id} item={item} />)}
+            {group.items.map(item => <LiveItemCard key={item.id} item={item} showScore={true} />)}
           </div>
         ))
       ) : (
-        items.map(item => <LiveItemCard key={item.id} item={item} />)
+        items.map(item => <LiveItemCard key={item.id} item={item} showScore={false} />)
       )}
     </div>
   );
 }
 
-function LiveItemCard({ item }: { item: LiveItem }) {
+function LiveItemCard({ item, showScore }: { item: LiveItem; showScore: boolean }) {
   const phaseClass =
     item._phase === 'summarized' ? styles.liveItemSummarized
       : item._phase === 'curated' ? styles.liveItemCurated
@@ -310,7 +310,7 @@ function LiveItemCard({ item }: { item: LiveItem }) {
       </div>
       <div className={styles.newsSideMeta}>
         <span>{item._categoryAssigned || item.category || 'AI'}</span>
-        {item.score != null && <span>score {item.score}</span>}
+        {showScore && item.score != null && <span>score {item.score}</span>}
       </div>
     </div>
   );
@@ -444,6 +444,10 @@ export default function App() {
   // Writer token stream (Phase 2): accumulated markdown text + drawer toggle.
   const [liveWriterText, setLiveWriterText] = useState('');
   const [streamingDrawerOpen, setStreamingDrawerOpen] = useState(false);
+  // Ref mirrors streamingDrawerOpen so the run() closure always reads the
+  // latest value (avoids stale closure when user opens drawer mid-run).
+  const streamingDrawerOpenRef = useRef(false);
+  useEffect(() => { streamingDrawerOpenRef.current = streamingDrawerOpen; }, [streamingDrawerOpen]);
 
   const drawerBodyRef = useRef<HTMLDivElement | null>(null);
   const activeRunRef = useRef<AbortController | null>(null);
@@ -586,9 +590,9 @@ export default function App() {
         const normalized = normalizeReport(finalReport);
         setReport(normalized);
         // If the user clicked the mini-typing card and is watching the
-        // streaming drawer, seamlessly hand off to the formal drawer view
-        // (with metadata pills) so they don't have to reopen anything.
-        if (streamingDrawerOpen) {
+        // streaming drawer, seamlessly hand off to the formal drawer view.
+        // Use ref to get the latest value (avoids stale closure).
+        if (streamingDrawerOpenRef.current) {
           setDrawerReport(normalized);
           setStreamingDrawerOpen(false);
           setDrawerOpen(true);

@@ -15,7 +15,7 @@
   margin: 0 -16px 18px;
   padding: 18px 16px;
   border-bottom: 1px solid #e5e7eb;
-  background: rgba(248, 250, 252, 0.9);
+  /* background: rgba(248, 250, 252, 0.9); */
   backdrop-filter: blur(18px);
 }
 
@@ -48,10 +48,11 @@
   margin-top: 6px !important;
   padding: 3px 10px;
   border-radius: 6px;
-  background: #f5f3ff;
+  /* background: #f5f3ff; */
   color: #7c3aed;
   font-size: 12px;
   font-weight: 500;
+  font-weight: bold;
 }
 
 .eyebrow,
