@@ -343,6 +343,45 @@ function MiniTypingCard({ text, onClick }: { text: string; onClick: () => void }
 }
 
 /* ====================================
+   Deploy FAB (one-click deploy for template)
+   ==================================== */
+function DeployFAB() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    // Slide in after 2s, same timing as reference implementation.
+    const timer = setTimeout(() => setVisible(true), 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleDeploy = () => {
+    const hostname = window.location.hostname;
+    const projectName = 'ai-trends-scheduled-summary';
+    const domain = hostname.split('.').slice(1).join('.');
+    const url = domain === 'edgeone.app'
+      ? `https://edgeone.ai/pages/new?template=${projectName}&from=github`
+      : `https://console.cloud.tencent.com/edgeone/pages/new?from=github&template=${projectName}`;
+    window.open(url, '_blank');
+  };
+
+  if (!visible) return null;
+
+  return (
+    <div className={styles.deployFab}>
+      <button className={styles.deployFabClose} onClick={() => setVisible(false)} aria-label="关闭">
+        <IconX size={14} />
+      </button>
+      <button className={styles.deployFabButton} onClick={handleDeploy}>
+        Deploy Now - Free!
+      </button>
+      <p className={styles.deployFabText}>
+        Power up your site with <a href="https://edgeone.ai/products/pages" target="_blank" rel="noreferrer">EdgeOne</a> - Get lightning-fast global CDN delivery, instantly and completely free
+      </p>
+    </div>
+  );
+}
+
+/* ====================================
    Skeleton Loaders
    ==================================== */
 function SkeletonNewsCard() {
@@ -1026,6 +1065,9 @@ export default function App() {
           </div>
         )}
       </aside>
+
+      {/* Deploy FAB */}
+      <DeployFAB />
     </main>
   );
 }
