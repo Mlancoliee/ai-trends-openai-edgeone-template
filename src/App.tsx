@@ -143,6 +143,9 @@ const IconDatabase = (p: IconProps) => (
 const IconClock = (p: IconProps) => (
   <Icon {...p}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></Icon>
 );
+const IconRocket = (p: IconProps) => (
+  <Icon {...p}><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" /><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" /><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" /><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" /></Icon>
+);
 
 function TriggerBadge({ trigger }: { trigger?: string }) {
   const { t } = useI18n();
@@ -346,10 +349,10 @@ function MiniTypingCard({ text, onClick }: { text: string; onClick: () => void }
    Deploy FAB (one-click deploy for template)
    ==================================== */
 function DeployFAB() {
+  const { t } = useI18n();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    // Slide in after 2s, same timing as reference implementation.
     const timer = setTimeout(() => setVisible(true), 2000);
     return () => clearTimeout(timer);
   }, []);
@@ -366,16 +369,20 @@ function DeployFAB() {
 
   if (!visible) return null;
 
+  const descParts = t('deployDesc').split('{link}');
+
   return (
     <div className={styles.deployFab}>
-      <button className={styles.deployFabClose} onClick={() => setVisible(false)} aria-label="关闭">
+      <button className={styles.deployFabClose} onClick={() => setVisible(false)} aria-label="Close">
         <IconX size={14} />
       </button>
       <button className={styles.deployFabButton} onClick={handleDeploy}>
-        Deploy Now - Free!
+        <IconRocket size={14} /> {t('deployButton')}
       </button>
       <p className={styles.deployFabText}>
-        Power up your site with <a href="https://edgeone.ai/products/pages" target="_blank" rel="noreferrer">EdgeOne</a> - Get lightning-fast global CDN delivery, instantly and completely free
+        {descParts[0]}
+        <a href="https://edgeone.ai/products/makers" target="_blank" rel="noreferrer">{t('deployLink')}</a>
+        {descParts[1]}
       </p>
     </div>
   );

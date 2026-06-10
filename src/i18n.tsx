@@ -89,6 +89,11 @@ const translations = {
     onboardingFeature2: '智能聚类',
     onboardingFeature3: '持续追踪',
     onboardingCta: '立即生成第一份报告',
+
+    // Deploy FAB
+    deployButton: '免费部署',
+    deployDesc: '使用 {link} 部署你自己的 AI 趋势监控站点，全球 CDN 加速，完全免费。',
+    deployLink: 'EdgeOne Makers',
   },
   en: {
     // Header
@@ -176,6 +181,11 @@ const translations = {
     onboardingFeature2: 'Smart Clustering',
     onboardingFeature3: 'Continuous Tracking',
     onboardingCta: 'Generate your first report',
+
+    // Deploy FAB
+    deployButton: 'Deploy Free',
+    deployDesc: 'Deploy your own AI trend monitor with {link} — lightning-fast global CDN, completely free.',
+    deployLink: 'EdgeOne Makers',
   },
 } as const;
 
