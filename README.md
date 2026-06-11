@@ -28,7 +28,7 @@ AI Trends Scheduled Summary runs a 4-agent pipeline on a daily cron schedule (or
 
 ### How to get `AI_GATEWAY_API_KEY`
 
-1. Open the [Makers Console](https://console.cloud.tencent.com/edgeone/makers).
+1. Open the [Makers Console](https://edgeone.ai/makers/new?s_url=https://console.tencentcloud.com/edgeone/makers).
 2. Sign in and enable Makers.
 3. Go to **Makers → Models → API Key** and create a key.
 4. Copy it into `AI_GATEWAY_API_KEY` (set `AI_GATEWAY_BASE_URL` to `https://ai-gateway.edgeone.link/v1`).
@@ -139,7 +139,7 @@ The `/ai-trends/run` endpoint returns an SSE stream with typed events:
 From `edgeone.json`:
 - `agents.timeout`: 1200s (20 min max pipeline duration)
 - `agent.sandbox.timeout`: 300s (sandbox lifetime for browser scraping)
-- `schedules[0].cron`: `0 9 * * *` (daily at 09:00 UTC)
+- `schedules[0].cron`: `0 9 * * *` (daily at 01:00 UTC)
 
 ### Route Summary
 

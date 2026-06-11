@@ -4,7 +4,7 @@
 
 **框架：** OpenAI Agents SDK · **分类：** Scheduled · **语言：** TypeScript
 
-[![部署到 EdgeOne Makers](https://console.cloud.tencent.com/edgeone/makers/new?template=ai-trends-scheduled-summary&from=within&fromAgent=1&agentLang=typescript)
+[![部署到 EdgeOne Makers](https://cdnstatic.tencentcs.com/edgeone/pages/deploy.svg)](https://console.cloud.tencent.com/edgeone/makers/new?template=ai-trends-scheduled-summary&from=within&fromAgent=1&agentLang=typescript)
 
 ## 概览
 
@@ -138,8 +138,8 @@ Agent 以 **会话模式** 运行在 `agents/` 下。相同 `conversation_id` �
 
 `edgeone.json` 关键参数：
 - `agents.timeout`：1200s（流水线最大运行时长 20 分钟）
-- `agent.sandbox.timeout`：300s（沙箱生命周期，用于浏览器抓取）
-- `schedules[0].cron`：`0 9 * * *`（每日 UTC 09:00 / 北京时间 17:00）
+- `agents.sandbox.timeout`：300s（沙箱生命周期，用于浏览器抓取）
+- `schedules[0].cron`：`0 9 * * *`（每日 UTC 01:00 / 北京时间 09:00）
 
 ### 路由一览
 

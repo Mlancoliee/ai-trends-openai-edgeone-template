@@ -83,12 +83,29 @@ const translations = {
     reportTitle: '趋势报告',
 
     // Onboarding
-    onboardingTitle: '开始追踪 AI 趋势',
-    onboardingDesc: '点击下方按钮，AI 将自动采集、筛选、分析并生成趋势报告。',
+    onboardingTitle: '开始你的第一份 AI 趋势报告',
+    onboardingDesc: '从 Hacker News、Dev.to、36kr 等公开技术资讯中聚合最新 AI 动态，通过 4 步 Agent 流水线（采集 → 策展 → 摘要 → 分析）输出可追溯的趋势报告。',
     onboardingFeature1: '多源采集',
     onboardingFeature2: '智能聚类',
     onboardingFeature3: '持续追踪',
-    onboardingCta: '立即生成第一份报告',
+    onboardingCta: '立即生成首份报告',
+    onboardingGenerating: '正在生成...',
+
+    // Drawer extras
+    liveTag: '实时生成中',
+    drawerLoading: '加载报告中...',
+    reportItems: '条资讯',
+    reportNew: '条新增',
+    noMoreHistory: '暂无更多历史报告',
+    close: '关闭',
+
+    // Live phase tags
+    phaseTagFetched: '采集',
+    phaseTagCurated: '已筛选',
+    phaseTagSummarized: '已摘要',
+    otherCategory: '其他',
+    unknownTimeLabel: '未知时间',
+    fallbackSummary: '动态',
 
     // Deploy FAB
     deployButton: '免费部署',
@@ -100,7 +117,7 @@ const translations = {
     eyebrow: 'AI Trends Monitor',
     title: 'AI Trends Summary',
     subtitle: 'Automatically crawl, curate, and summarize AI industry news into traceable trend reports.',
-    scheduleHint: 'Daily at 9:00 UTC',
+    scheduleHint: 'Daily at 1:00 UTC',
     generate: 'Generate',
     generating: 'Generating...',
     stop: 'Stop',
@@ -175,12 +192,29 @@ const translations = {
     reportTitle: 'Trend Report',
 
     // Onboarding
-    onboardingTitle: 'Start Tracking AI Trends',
-    onboardingDesc: 'Click the button below. AI will automatically collect, filter, analyze, and generate a trend report.',
+    onboardingTitle: 'Generate Your First AI Trend Report',
+    onboardingDesc: 'Aggregate the latest AI news from Hacker News, Dev.to, 36kr and more through a 4-step Agent pipeline (Collect → Curate → Summarize → Analyze) into a traceable trend report.',
     onboardingFeature1: 'Multi-source',
     onboardingFeature2: 'Smart Clustering',
     onboardingFeature3: 'Continuous Tracking',
-    onboardingCta: 'Generate your first report',
+    onboardingCta: 'Generate first report',
+    onboardingGenerating: 'Generating...',
+
+    // Drawer extras
+    liveTag: 'Live generating',
+    drawerLoading: 'Loading report...',
+    reportItems: 'items',
+    reportNew: 'new',
+    noMoreHistory: 'No more history',
+    close: 'Close',
+
+    // Live phase tags
+    phaseTagFetched: 'Fetched',
+    phaseTagCurated: 'Curated',
+    phaseTagSummarized: 'Summarized',
+    otherCategory: 'Other',
+    unknownTimeLabel: 'Unknown',
+    fallbackSummary: 'update',
 
     // Deploy FAB
     deployButton: 'Deploy Free',

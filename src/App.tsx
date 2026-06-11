@@ -29,13 +29,13 @@ function StatusPill({ status }: { status?: string }) {
   return <span className={`${styles.status} ${styles[`status_${normalized}`] ?? ''}`}>{labels[normalized] ?? normalized}</span>;
 }
 
-function itemSummary(item?: TrendItem): string {
+function itemSummary(item?: TrendItem, fallbackLabel = 'update'): string {
   if (!item) return '';
-  return item.aiSummary?.trim() || item.summary?.trim() || `${item.category || 'AI'} 动态：${item.title}。`;
+  return item.aiSummary?.trim() || item.summary?.trim() || `${item.category || 'AI'} ${fallbackLabel}: ${item.title}`;
 }
 
-function formatItemTime(value?: string): string {
-  if (!value) return '未知时间';
+function formatItemTime(value?: string, fallbackLabel = 'Unknown'): string {
+  if (!value) return fallbackLabel;
   return formatTime(value);
 }
 
@@ -43,10 +43,10 @@ const TOPICS = ['AI Agent', 'LLM', 'Multimodal', 'Open Source Model', 'AI Infra'
 const DEFAULT_SOURCES = ['Hacker News', 'Dev.to'];
 
 const PIPELINE_STAGES = [
-  { key: 'fetch', label: 'Fetch', labelCn: '采集' },
-  { key: 'filter', label: 'Filter & Summarize', labelCn: '筛选 & 摘要', parallel: ['curator', 'summarizer'] },
-  { key: 'analyst', label: 'Analyze', labelCn: '分析' },
-  { key: 'writer', label: 'Write', labelCn: '撰写' },
+  { key: 'fetch', i18nKey: 'stageFetch' as const, parallel: undefined },
+  { key: 'filter', i18nKey: 'stageFilter' as const, parallel: ['curator', 'summarizer'] },
+  { key: 'analyst', i18nKey: 'stageAnalyze' as const, parallel: undefined },
+  { key: 'writer', i18nKey: 'stageWrite' as const, parallel: undefined },
 ] as const;
 
 type StageStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
@@ -166,7 +166,7 @@ function PipelineBar({
 }: {
   stages: Record<string, StageState>;
 }) {
-  const { locale } = useI18n();
+  const { t } = useI18n();
   // Compute merged stage status for parallel stages (curator + summarizer → filter)
   const getStageState = (def: typeof PIPELINE_STAGES[number]): StageState => {
     if ('parallel' in def && def.parallel) {
@@ -205,7 +205,7 @@ function PipelineBar({
                 {state.status === 'running' && <span className={styles.stagePulse} />}
               </div>
               <div className={styles.stageInfo}>
-                <span className={styles.stageName}>{locale === 'zh' ? def.labelCn : def.label}</span>
+                <span className={styles.stageName}>{t(def.i18nKey)}</span>
                 {state.duration != null && (
                   <span className={styles.stageDuration}>{state.duration.toFixed(0)}s</span>
                 )}
@@ -256,7 +256,7 @@ function LiveFeed({
       if (catItems.length) result.push({ name: cat.name, items: catItems });
     }
     const orphans = items.filter(it => !used.has(it.id));
-    if (orphans.length) result.push({ name: '其他', items: orphans });
+    if (orphans.length) result.push({ name: t('otherCategory'), items: orphans });
     return result;
   }, [items, analysis]);
 
@@ -286,6 +286,7 @@ function LiveFeed({
 }
 
 function LiveItemCard({ item, showScore }: { item: LiveItem; showScore: boolean }) {
+  const { t } = useI18n();
   const phaseClass =
     item._phase === 'summarized' ? styles.liveItemSummarized
       : item._phase === 'curated' ? styles.liveItemCurated
@@ -298,9 +299,9 @@ function LiveItemCard({ item, showScore }: { item: LiveItem; showScore: boolean 
         <div className={styles.newsMetaTop}>
           <span className={styles.sourceBadge}>{item.source}</span>
           <span>{item.publishedAt ? formatTime(item.publishedAt) : ''}</span>
-          {item._phase === 'fetched' && <span className={styles.livePhaseTag}>采集</span>}
-          {item._phase === 'curated' && <span className={styles.livePhaseTagCurated}>已筛选</span>}
-          {item._phase === 'summarized' && <span className={styles.livePhaseTagSummarized}>已摘要</span>}
+          {item._phase === 'fetched' && <span className={styles.livePhaseTag}>{t('phaseTagFetched')}</span>}
+          {item._phase === 'curated' && <span className={styles.livePhaseTagCurated}>{t('phaseTagCurated')}</span>}
+          {item._phase === 'summarized' && <span className={styles.livePhaseTagSummarized}>{t('phaseTagSummarized')}</span>}
           {item._categoryStatus === 'new' && <span className={styles.newBadge}>NEW</span>}
         </div>
         <strong>{item.title}</strong>
@@ -435,32 +436,30 @@ function SkeletonReportItem() {
    Empty State – Onboarding Hero
    ==================================== */
 function OnboardingHero({ onStart, loading }: { onStart: () => void; loading: boolean }) {
+  const { t } = useI18n();
   return (
     <div className={styles.onboardCard}>
       <div className={styles.onboardIconWrap}>
         <IconCompass size={28} />
       </div>
-      <h3 className={styles.onboardTitle}>开始你的第一份 AI 趋势报告</h3>
-      <p className={styles.onboardSubtitle}>
-        从 Hacker News、Dev.to、36kr 等公开技术资讯中聚合最新 AI 动态，
-        通过 4 步 Agent 流水线（采集 → 策展 → 摘要 → 分析）输出可追溯的趋势报告。
-      </p>
+      <h3 className={styles.onboardTitle}>{t('onboardingTitle')}</h3>
+      <p className={styles.onboardSubtitle}>{t('onboardingDesc')}</p>
       <div className={styles.onboardFeatureRow}>
         <span className={styles.onboardFeature}>
-          <IconDatabase size={13} /> 多源采集
+          <IconDatabase size={13} /> {t('onboardingFeature1')}
         </span>
         <span className={styles.onboardFeature}>
-          <IconLayers size={13} /> 智能聚类
+          <IconLayers size={13} /> {t('onboardingFeature2')}
         </span>
         <span className={styles.onboardFeature}>
-          <IconTrendingUp size={13} /> 持续追踪
+          <IconTrendingUp size={13} /> {t('onboardingFeature3')}
         </span>
       </div>
       <button className={styles.onboardCta} onClick={onStart} disabled={loading}>
         {loading ? (
-          <><span className={styles.btnSpinner} /> 正在生成...</>
+          <><span className={styles.btnSpinner} /> {t('onboardingGenerating')}</>
         ) : (
-          <><IconPlay size={16} /> 立即生成首份报告</>
+          <><IconPlay size={16} /> {t('onboardingCta')}</>
         )}
       </button>
     </div>
@@ -860,11 +859,11 @@ export default function App() {
                       <div className={styles.newsMain}>
                         <div className={styles.newsMetaTop}>
                           <span className={styles.sourceBadge}>{item.source}</span>
-                          <span>{formatItemTime(item.publishedAt)}</span>
+                          <span>{formatItemTime(item.publishedAt, t('unknownTimeLabel'))}</span>
                           {item.isNew && <span className={styles.newBadge}>NEW</span>}
                         </div>
                         <strong>{item.title}</strong>
-                        <p>{itemSummary(item)}</p>
+                        <p>{itemSummary(item, t('fallbackSummary'))}</p>
                       </div>
                       <div className={styles.newsSideMeta}>
                         <span>{item.category || 'AI'}</span>
@@ -896,11 +895,11 @@ export default function App() {
                       <div className={styles.newsMain}>
                         <div className={styles.newsMetaTop}>
                           <span className={styles.sourceBadge}>{item.source}</span>
-                          <span>{formatItemTime(item.publishedAt)}</span>
+                          <span>{formatItemTime(item.publishedAt, t('unknownTimeLabel'))}</span>
                           {item.isNew && <span className={styles.newBadge}>NEW</span>}
                         </div>
                         <strong>{item.title}</strong>
-                        <p>{itemSummary(item)}</p>
+                        <p>{itemSummary(item, t('fallbackSummary'))}</p>
                       </div>
                       <div className={styles.newsSideMeta}>
                         <span>{item.category || 'AI'}</span>
@@ -984,7 +983,7 @@ export default function App() {
                       <p>{item.summary || item.error || t('noSummary')}</p>
                       <div className={styles.reportItemMeta}>
                         {item.itemCount != null && <span>{item.itemCount} {t('items')}</span>}
-                        {item.newItemCount != null && <span>{item.newItemCount} {locale === 'zh' ? '条新增' : 'new'}</span>}
+                        {item.newItemCount != null && <span>{item.newItemCount} {t('reportNew')}</span>}
                       </div>
                     </button>
                     <button
@@ -1008,7 +1007,7 @@ export default function App() {
                 {!history.filter(item => item.runId !== safeReport.runId).length && safeReport.status === 'success' && (
                   <div className={styles.sidebarEmpty}>
                     <IconInbox />
-                    <p className={styles.sidebarEmptyHint}>暂无更多历史报告</p>
+                    <p className={styles.sidebarEmptyHint}>{t('noMoreHistory')}</p>
                   </div>
                 )}
               </div>
@@ -1032,7 +1031,7 @@ export default function App() {
                 : drawerReport?.generatedAt ? formatTime(drawerReport.generatedAt, locale) : t('reportTitle')}
             </h2>
           </div>
-          <button type="button" className={styles.drawerClose} onClick={closeDrawer} aria-label="关闭">
+          <button type="button" className={styles.drawerClose} onClick={closeDrawer} aria-label={t('close')}>
             <IconX size={16} />
           </button>
         </div>
@@ -1042,9 +1041,9 @@ export default function App() {
           <div className={styles.drawerBody} ref={drawerBodyRef}>
             <div className={styles.drawerMeta}>
               <span className={`${styles.reportMetaTag} ${styles.reportMetaTagLive}`}>
-                <span className={styles.miniTypingDot} /> 实时生成中
+                <span className={styles.miniTypingDot} /> {t('liveTag')}
               </span>
-              <span className={styles.reportMetaTag}>{liveWriterText.length} 字</span>
+              <span className={styles.reportMetaTag}>{liveWriterText.length} {t('chars')}</span>
             </div>
             <div className={styles.streamingMarkdownWrap}>
               <MarkdownReport markdown={liveWriterText} />
@@ -1056,7 +1055,7 @@ export default function App() {
         {/* Loading-detail view (when fetching a historical report) */}
         {!streamingDrawerOpen && drawerLoading && !drawerReport && (
           <div className={styles.drawerBody}>
-            <p className={styles.drawerLoadingText}>加载报告中...</p>
+            <p className={styles.drawerLoadingText}>{t('drawerLoading')}</p>
           </div>
         )}
 
@@ -1064,8 +1063,8 @@ export default function App() {
         {!streamingDrawerOpen && drawerReport && (
           <div className={styles.drawerBody} ref={drawerBodyRef}>
             <div className={styles.drawerMeta}>
-              {drawerReport.itemCount != null && <span className={styles.reportMetaTag}>{drawerReport.itemCount} 条资讯</span>}
-              {drawerReport.newItemCount != null && <span className={styles.reportMetaTag}>{drawerReport.newItemCount} 条新增</span>}
+              {drawerReport.itemCount != null && <span className={styles.reportMetaTag}>{drawerReport.itemCount} {t('reportItems')}</span>}
+              {drawerReport.newItemCount != null && <span className={styles.reportMetaTag}>{drawerReport.newItemCount} {t('reportNew')}</span>}
               {drawerReport.durationMs != null && <span className={styles.reportMetaTag}>{(drawerReport.durationMs / 1000).toFixed(1)}s</span>}
             </div>
             <MarkdownReport markdown={drawerReport.reportMarkdown} />
