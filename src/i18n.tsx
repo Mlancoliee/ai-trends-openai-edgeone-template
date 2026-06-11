@@ -108,7 +108,7 @@ const translations = {
     fallbackSummary: '动态',
 
     // Deploy FAB
-    deployButton: '免费部署',
+    deployButton: '一键部署',
     deployDesc: '使用 {link} 部署你自己的 AI 趋势监控站点，全球 CDN 加速，完全免费。',
     deployLink: 'EdgeOne Makers',
   },
@@ -217,7 +217,7 @@ const translations = {
     fallbackSummary: 'update',
 
     // Deploy FAB
-    deployButton: 'Deploy Free',
+    deployButton: 'Deploy',
     deployDesc: 'Deploy your own AI trend monitor with {link} — lightning-fast global CDN, completely free.',
     deployLink: 'EdgeOne Makers',
   },
