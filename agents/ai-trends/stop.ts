@@ -1,5 +1,5 @@
 /**
- * Stop handler — EdgeOne Pages Functions
+ * Stop handler — EdgeOne Makers Functions
  * ========================================
  *
  * Aborts the active agent run for the given conversationId.
